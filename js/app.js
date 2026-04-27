@@ -40,44 +40,51 @@ var DONE_KEY = "sefiie_votes_done_2026";
 var SEL_KEY  = "sefiie_votes_sel_2026";
 function getDone() { try { return JSON.parse(localStorage.getItem(DONE_KEY)) || {}; } catch(e) { return {}; } }
 function saveDone(v) { localStorage.setItem(DONE_KEY, JSON.stringify(v)); }
-function getSel()  { try { return JSON.parse(localStorage.getItem(SEL_KEY))  || {}; } catch(e) { return {}; } }
-function saveSel(v)  { localStorage.setItem(SEL_KEY,  JSON.stringify(v)); }
+function getSel()  { try { return JSON.parse(localStorage.getItem(SEL_KEY)) || {}; } catch(e) { return {}; } }
+function saveSel(v) { localStorage.setItem(SEL_KEY, JSON.stringify(v)); }
 
 // ===== FIREBASE =====
 var db = null;
 var firebaseOK = false;
+
 function initFirebase() {
   try {
     var fbLib = window.firebase;
     if (!fbLib) throw new Error("SDK absent");
-    if (!fbLib.apps.length) {
-      fbLib.initializeApp({
-        apiKey: "AIzaSyDqo__ubM_dwBGXEdkF_XcAwAfIPn0jldo",
-        authDomain: "sefiie-2026.firebaseapp.com",
-        projectId: "sefiie-2026",
-        storageBucket: "sefiie-2026.firebasestorage.app",
-        messagingSenderId: "806185705172",
-        appId: "1:806185705172:web:efb5d35f587c48cc936541"
-      });
-    }
-    db = fbLib.firestore();
+    var appName = "sefiie1";
+    var existingApp = fbLib.apps.find(function(a) { return a.name === appName; });
+    var app = existingApp || fbLib.initializeApp({
+      apiKey: "AIzaSyDPCn_M4TIxXW0I5Upil2riujBcL2D6jJg",
+      authDomain: "sefiie1.firebaseapp.com",
+      projectId: "sefiie1",
+      storageBucket: "sefiie1.firebasestorage.app",
+      messagingSenderId: "507234774255",
+      appId: "1:507234774255:web:416b3a477694701ce6bf1a"
+    }, appName);
+    db = fbLib.firestore(app);
     firebaseOK = true;
-    console.log("[SEFIIE] Firebase OK");
+    console.log("[SEFIIE] Firebase OK — sefiie1");
   } catch(e) {
     console.warn("[SEFIIE] Firebase indisponible:", e.message);
   }
 }
 
-// ===== CHARGER COMPTEURS =====
+// ===== CHARGER ET AFFICHER LES COMPTEURS =====
 function loadAndRender() {
+  var done = getDone();
+
   if (!firebaseOK) { renderUI({}); return; }
+
   db.collection("votes").get()
     .then(function(snap) {
       var counts = {};
       snap.forEach(function(d) { counts[d.id] = d.data().count || 0; });
       renderUI(counts);
     })
-    .catch(function() { renderUI({}); });
+    .catch(function(e) {
+      console.warn("[SEFIIE] Lecture impossible:", e.message);
+      renderUI({});
+    });
 }
 
 // ===== RENDER UI =====
@@ -85,7 +92,6 @@ function renderUI(counts) {
   var done = getDone();
   var sel  = getSel();
 
-  // Afficher tous les compteurs
   document.querySelectorAll(".vote-btn").forEach(function(btn) {
     var key = btn.dataset.category + "_" + btn.dataset.id;
     btn.querySelector(".vote-count").textContent = counts[key] || 0;
@@ -99,7 +105,6 @@ function renderUI(counts) {
       return;
     }
 
-    // Brancher chaque bouton candidat
     document.querySelectorAll(".vote-btn[data-category='" + cat + "']").forEach(function(btn) {
       var id = btn.dataset.id;
       if (sel[cat] === id) {
@@ -110,7 +115,6 @@ function renderUI(counts) {
       btn.addEventListener("click", function() { onSelect(cat, id, btn, vBtn); });
     });
 
-    // Brancher le bouton valider
     if (vBtn) {
       vBtn.addEventListener("click", function() { onValidate(cat, vBtn); });
     }
@@ -120,7 +124,6 @@ function renderUI(counts) {
 // ===== SELECTION =====
 function onSelect(cat, id, btn, vBtn) {
   var sel = getSel();
-  // Deselectionner l'ancienne
   if (sel[cat] && sel[cat] !== id) {
     var old = document.querySelector(".vote-btn[data-category='" + cat + "'][data-id='" + sel[cat] + "']");
     if (old) { old.classList.remove("active"); old.closest(".cand-card").classList.remove("voted"); }
@@ -129,7 +132,6 @@ function onSelect(cat, id, btn, vBtn) {
   saveSel(sel);
   btn.classList.add("active");
   btn.closest(".cand-card").classList.add("voted");
-  // Activer le bouton valider directement via la reference passee
   if (vBtn) vBtn.disabled = false;
 }
 
@@ -142,38 +144,42 @@ function onValidate(cat, vBtn) {
   vBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enregistrement...';
 
   var key = cat + "_" + id;
-  var labels = { deleguee: "Meilleure Deleguee Feminine", presidente: "Meilleure Presidente de Club", entrepreneuse: "Meilleure Entrepreneuse", miss: "Miss SEFIIE 2026" };
+  var labels = {
+    deleguee: "Meilleure Deleguee Feminine",
+    presidente: "Meilleure Presidente de Club",
+    entrepreneuse: "Meilleure Entrepreneuse",
+    miss: "Miss SEFIIE 2026"
+  };
 
-  function onSuccess(newCount) {
+  if (!firebaseOK) {
+    showToast("Service indisponible.", "error");
+    vBtn.disabled = false;
+    vBtn.innerHTML = '<i class="fas fa-check-circle"></i> Valider mon vote';
+    return;
+  }
+
+  var ref = db.collection("votes").doc(key);
+  db.runTransaction(function(tx) {
+    return tx.get(ref).then(function(snap) {
+      var next = (snap.exists ? (snap.data().count || 0) : 0) + 1;
+      tx.set(ref, { count: next, category: cat, candidateId: id });
+      return next;
+    });
+  })
+  .then(function(n) {
+    console.log("[SEFIIE] Vote enregistre : " + key + " = " + n);
     var countEl = document.querySelector(".vote-btn[data-category='" + cat + "'][data-id='" + id + "'] .vote-count");
-    if (countEl) countEl.textContent = newCount;
+    if (countEl) countEl.textContent = n;
     var done = getDone(); done[cat] = id; saveDone(done);
     lockCategory(cat, id);
     showToast("Vote confirme : " + labels[cat] + " !", "success");
-  }
-
-  function onError(msg) {
-    console.error("[SEFIIE] Erreur:", msg);
-    showToast("Erreur reseau, reessayez.", "error");
+  })
+  .catch(function(e) {
+    console.error("[SEFIIE] Erreur vote:", e.message);
+    showToast("Erreur, reessayez.", "error");
     vBtn.disabled = false;
     vBtn.innerHTML = '<i class="fas fa-check-circle"></i> Valider mon vote';
-  }
-
-  if (firebaseOK) {
-    var ref = db.collection("votes").doc(key);
-    db.runTransaction(function(tx) {
-      return tx.get(ref).then(function(snap) {
-        var next = (snap.exists ? (snap.data().count || 0) : 0) + 1;
-        tx.set(ref, { count: next, category: cat, candidateId: id });
-        return next;
-      });
-    })
-    .then(function(n) { onSuccess(n); })
-    .catch(function(e) { onError(e.message); });
-  } else {
-    var el = document.querySelector(".vote-btn[data-category='" + cat + "'][data-id='" + id + "'] .vote-count");
-    onSuccess((parseInt(el ? el.textContent : "0") || 0) + 1);
-  }
+  });
 }
 
 // ===== VERROUILLER =====
