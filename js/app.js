@@ -51,19 +51,19 @@ function initFirebase() {
   try {
     var fbLib = window.firebase;
     if (!fbLib) throw new Error("SDK absent");
-    var appName = "sefiie1";
+    var appName = "sefiie2";
     var existingApp = fbLib.apps.find(function(a) { return a.name === appName; });
     var app = existingApp || fbLib.initializeApp({
-      apiKey: "AIzaSyDPCn_M4TIxXW0I5Upil2riujBcL2D6jJg",
-      authDomain: "sefiie1.firebaseapp.com",
-      projectId: "sefiie1",
-      storageBucket: "sefiie1.firebasestorage.app",
-      messagingSenderId: "507234774255",
-      appId: "1:507234774255:web:416b3a477694701ce6bf1a"
+      apiKey: "AIzaSyANGB28t9ipp15Fj0YBrJLx_cTFdrUkZHQ",
+      authDomain: "sefiie2.firebaseapp.com",
+      projectId: "sefiie2",
+      storageBucket: "sefiie2.firebasestorage.app",
+      messagingSenderId: "788877299478",
+      appId: "1:788877299478:web:7ff21aa8ffd74ed7eb0a37"
     }, appName);
     db = fbLib.firestore(app);
     firebaseOK = true;
-    console.log("[SEFIIE] Firebase OK — sefiie1");
+    console.log("[SEFIIE] Firebase OK — sefiie2");
   } catch(e) {
     console.warn("[SEFIIE] Firebase indisponible:", e.message);
   }
